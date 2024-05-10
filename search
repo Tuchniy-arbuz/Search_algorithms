@@ -1,0 +1,289 @@
+#include <iostream>
+#include <vector>
+#include <random>
+#include <queue>
+#include <unordered_set>
+
+std::random_device dev;
+std::mt19937 rng(dev());
+
+
+class Field
+{
+private:
+    std::vector<std::vector<int>> field;
+
+    class Container
+    {
+    private:
+        long long path_cost;
+        int column;
+        int row;
+    public:
+        Container(long long path_cost, int column, int row):
+                path_cost(path_cost), column(column), row(row){}
+        long long get_path_cost(){return path_cost;}
+        int get_column(){return column;}
+        int get_row(){return row;}
+    };
+
+    long long waveAlgorithm(int start_column, int start_row, int end_column, int end_row, const bool sqrs_only){
+
+        std::queue<Container> Q;
+        std::vector<std::vector<long long>> used{field.size(), std::vector<long long>(field[0].size(), -1)};
+        used[start_column][start_row] = 0;
+        Q.emplace(0, start_column, start_row);
+        while(!Q.empty()){
+            auto current = Q.front();
+            Q.pop();
+            int border_for_column = (current.get_column() == (field.size()-1) ? int(field.size()) : current.get_column()+2);
+            int border_for_row = (current.get_row() == field[0].size() - 1 ? int(field[0].size()): current.get_row() + 2);
+            for(int column = current.get_column() == 0 ? 0 : current.get_column()-1; column < border_for_column; column++) {
+                for (int row = current.get_row() == 0 ? 0 : current.get_row() - 1;
+                     row < (current.get_row() == field[0].size() - 1 ? field[0].size(): current.get_row() + 2); row++) {
+                    if (used[column][row] == -1 && sqrs_only && field[column][row]!=-1) {
+                        if(column == end_column && row == end_row){
+                            return current.get_path_cost()+1;
+                        }
+                        used[column][row] = true;
+                        Q.emplace(current.get_path_cost() + 1, column, row);
+                    } else if (!sqrs_only && (used[column][row]>current.get_path_cost()+field[column][row] || used[column][row]==-1)
+                                && field[column][row]!=-1){
+                        used[column][row] = current.get_path_cost()+field[column][row];
+                        Q.emplace(current.get_path_cost()+field[column][row], column, row);
+                    }
+                }
+            }
+        }
+        return used[end_column][end_row];
+    }
+
+    double heuristic(int start_column, int start_row, int end_column, int end_row){
+        return sqrt((end_column - start_column) * (end_column - start_column) + (end_row - start_row) * (end_row - start_row));
+    }
+
+    class ContainerForA_Star
+    {
+    private:
+        long long path_cost;
+        double heuristic;
+        int column;
+        int row;
+    public:
+        ContainerForA_Star(long long path_cost, double heuristic, int column, int row) :
+                path_cost(path_cost), heuristic(heuristic), column(column), row(row){}
+        long long get_path_cost(){return path_cost;}
+        double get_heuristic(){return heuristic;}
+        int get_column(){return column;}
+        int get_row(){return row;}
+    };
+
+    struct QueueCompForA_Star {
+        bool operator()(
+                ContainerForA_Star a,
+                ContainerForA_Star& b)
+        {
+            return a.get_path_cost()+a.get_heuristic()>b.get_path_cost()+b.get_heuristic();
+        }
+    };
+
+    struct Pair_Hasher
+    {
+        std::size_t operator()(const std::pair<int, int>& pair) const
+        {
+            std::size_t hash = 0;
+            std::hash<int> hasher;
+            hash ^= hasher(pair.first) + 0x9e3779b9 + (hash<<6) + (hash>>2);
+            hash ^= hasher(pair.second) + 0x9e3779b9 + (hash<<6) + (hash>>2);
+            return hash;
+        }
+    };
+
+    long long A_Star(int start_column, int start_row, int end_column, int end_row){
+        std::priority_queue<ContainerForA_Star, std::vector<ContainerForA_Star>, QueueCompForA_Star> Q;
+        std::unordered_set<std::pair<int, int>, Pair_Hasher> used;
+        Q.emplace(0, heuristic(start_column, start_row, end_column, end_row), start_column, start_row);
+        while(!Q.empty()){
+            auto current = Q.top();
+            Q.pop();
+            if(current.get_column() == end_column && current.get_row() == end_row){return current.get_path_cost();}
+            int border_for_column = (current.get_column() == (field.size()-1) ? int(field.size()) : current.get_column()+2);
+            int border_for_row = (current.get_row() == field[0].size() - 1 ? int(field[0].size()): current.get_row() + 2);
+            for(int column = current.get_column() == 0 ? 0 : current.get_column()-1; column < border_for_column; column++) {
+                for (int row = current.get_row() == 0 ? 0 : current.get_row() - 1; row < border_for_row; row++){
+                    std::pair<int,int> coordinates(column, row);
+                    if(!used.contains(coordinates) && field[column][row]!=-1){
+                        used.emplace(coordinates);
+                        Q.emplace(current.get_path_cost()+1, heuristic(column, row, end_column, end_row), column, row);
+                    }
+                }
+            }
+        }
+        return -1;
+    }
+
+    struct QueueCompForDijkstra {
+        bool operator()(
+                Container& a,
+                Container& b)
+        {
+            return a.get_path_cost()>b.get_path_cost();
+        }
+    };
+
+    long long Dijkstra(int start_column, int start_row, int end_column, int end_row){
+        std::priority_queue<Container, std::vector<Container>, QueueCompForDijkstra> Q;
+        std::vector<std::vector<long long>> used{field.size(), std::vector<long long>(field[0].size(), -1)};
+        Q.emplace(0,start_column, start_row);
+        used[start_column][start_row] = 0;
+        while(!Q.empty()){
+            auto current = Q.top();
+            Q.pop();
+            if(current.get_column() == end_column && current.get_row() == end_row){return current.get_path_cost();}
+            int border_for_column = (current.get_column() == (field.size()-1) ? int(field.size()) : current.get_column()+2);
+            int border_for_row = (current.get_row() == field[0].size() - 1 ? int(field[0].size()): current.get_row() + 2);
+            for(int column = current.get_column() == 0 ? 0 : current.get_column()-1;column < border_for_column; column++) {
+                for (int row = current.get_row() == 0 ? 0 : current.get_row() - 1; row < border_for_row; row++){
+                    if(field[column][row]!=-1 && (current.get_path_cost()+field[column][row] < used[column][row] || used[column][row])){
+                        used[column][row] = current.get_path_cost()+field[column][row];
+                        Q.emplace(current.get_path_cost()+field[column][row], column, row);
+                    }
+                }
+            }
+        }
+        return -1;
+    }
+
+
+    bool checkIfAllowed(int column, int row){
+        if(column < 0 || column>= field.size() || row < 0 || row >= field[0].size() || field[column][row]==-1){
+            std::cout << "This point is none valid\n";
+            std::cin.clear();
+            while(std::cin.get() != '\n');
+            return true;
+        }
+        return false;
+    }
+
+    bool checkIfChoiceAllowed(int choice){
+        if(choice != 1 && choice != 2){
+            std::cout <<"invalid choice\n";
+            std::cin.clear();
+            while(std::cin.get() != '\n');
+            return true;
+        }
+        return false;
+    }
+
+
+    int my_rand(int from, int to){
+        std::uniform_int_distribution rn(from,to);
+        return rn(rng);
+    }
+
+    void print(){
+        for(int i  = 0; i < field[0].size(); i++){
+            for(int ii= 0; ii < field.size(); ii++){
+                std::cout << field[ii][i] << '\t';
+            }
+            std::cout << '\n';
+        }
+    }
+public:
+    Field(int columns, int rows, int min_val, int max_val, int percentage_of_blocks){
+        columns = columns > 0 ? columns : 1;
+        rows = rows > 0 ? rows : 1;
+        min_val = min_val >= 0 ? min_val : 0;
+        max_val = max_val >= min_val ? max_val : min_val;
+
+        std::uniform_int_distribution rn(min_val,max_val);
+        std::uniform_int_distribution rn_rows(0,rows-1);
+        std::uniform_int_distribution rn_columns(0,columns-1);
+        field.resize(columns,std::vector<int>(rows));
+        for(auto&vct : field){
+            for(auto&element :vct){
+                element = rn(rng);
+            }
+        }
+        for(int i = 0; i <= columns*rows*percentage_of_blocks/100; i++){
+            field[rn_columns(rng)][rn_rows(rng)] = -1;
+        }
+    }
+
+    void start() {
+        int start_column = -1;
+        int start_row = -1;
+        int end_column = -1;
+        int end_row = -1;
+        int sqrs_choice = -1;
+        int func_choice = -1;
+        int condition = 1;
+        while (condition == 1) {
+            print();
+
+            do {
+                std::cout << "insert your start point row\n";
+                std::cin >> start_row;
+                std::cin.clear();
+                while(std::cin.get() != '\n');
+                std::cout << "insert your start point column\n";
+                std::cin >> start_column;
+            } while (checkIfAllowed(start_column, start_row));
+
+            do {
+                std::cout << "insert your end point row\n";
+                std::cin >> end_row;
+                std::cin.clear();
+                while(std::cin.get() != '\n');
+                std::cout << "insert your end point column\n";
+                std::cin >> end_column;
+            } while (checkIfAllowed(end_column, end_row));
+
+            do {
+                std::cout << "1. squares only\n2. value of squares\n";
+                std::cin >> sqrs_choice;
+            } while (checkIfChoiceAllowed(sqrs_choice));
+
+            do {
+                if (sqrs_choice == 1) {
+                    std::cout << "1. Wave algorithm\n2. A* algorithm\n";
+                    std::cin >> func_choice;
+                }
+                else{
+                    std::cout << "1. Wave algorithm\n2. Dijkstra algorithm\n";
+                    std::cin >> func_choice;
+                }
+            } while (checkIfChoiceAllowed(func_choice));
+
+            long long result;
+            if (sqrs_choice == 1) {
+                if (func_choice == 1) {
+                    result = waveAlgorithm(start_column, start_row, end_column, end_row, true);
+                } else {
+                    result = A_Star(start_column, start_row, end_column, end_row);
+                }
+            } else {
+                if (func_choice == 1) {
+                    result = waveAlgorithm(start_column, start_row, end_column, end_row, false);
+                } else {
+                    result = Dijkstra(start_column, start_row, end_column, end_row);
+                }
+            }
+
+            result == -1 ? std::cout << "No path was found\n" : std::cout << "Length of the shortest path is "
+                                                                          << result <<'\n';
+
+            do{
+                std::cout << "1. continue\n2. exit\n";
+                std::cin >> condition;
+            } while (checkIfChoiceAllowed(condition));
+        }
+    }
+};
+
+
+int main(){
+    Field A(5, 5, 1, 11, 20);
+    A.start();
+    return 0;
+}
